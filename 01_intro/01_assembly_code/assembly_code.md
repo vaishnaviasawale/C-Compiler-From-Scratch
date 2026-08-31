@@ -89,6 +89,12 @@ The 'mov eax, 42' and 'ret' is GCC translating 'return 42;' into instructions th
 
 ## test2.s
 Run 'gcc -o test2 test2.s' and then './test2'. Again, nothing happens till you eun 'echo $?' to get '42'
+In this assembly, a global label mainis defined, followed by the mainfunction code. Here, the
+value 42 is set to the register RAX, and mainthen the function returns. There are a total of 16
+registers that can hold integers, including RAX, but the value in RAX when the function returns
+is considered the function's return value, so the value is set to RAX here.
+
+In x86 and x86-64 architecture, the RAX register stores the primary return value when a function finishes executing.
 
 ## test1.c vs test2.s
              C
@@ -196,3 +202,244 @@ machine code          assembly
 ─────────────         ─────────
 b8 2a 00 00 00        mov eax,0x2a
 c3                    ret
+
+
+# Function Calls
+
+Unlike a simple jump, a function call requires the program to return to its original execution
+location after the called function finishes. This original execution address is called the "return
+address." If there is only one function call, the return address can be stored in a suitable
+register in the CPU. However, since function calls can be made infinitely deep, the return
+address is stored on the memory
+stack . A stack can be implemented using only one variable that holds the address of the top of the
+stack. The memory area that holds the address of the top of the stack is called the "stack
+pointer." x86-64 supports a dedicated register for the stack pointer and instructions that use
+that register to support function-based programming.
+
+
+# Code
+
+## test3.c
+
+Running './test3' gives nothing, but running 'echo $?' shows 7
+
+## test4.s
+
+The first line specifies the assembly syntax. .globlThe line starting with the second line
+instructs assembly that the two functions and are visible to the entire program, not just within
+the file scope.
+
+In assembly
+language, the convention is that the first argument goes into the RDI register and the second
+argument goes into the RSI register, so the main first two lines of the code set the values ​
+accordingly.
+
+The syntax is: add destination, source
+We could write 'add rsi, rdi' or 'add rdi, rsi' because addition is commutative.
+
+call plus does the following:
+- Push the address of the next instruction (in this case ret) onto the stack
+- Jump to the address given as an argument
+
+Therefore, once the instruction call is executed, the CPU will begin executing the function plus.
+
+The result of adding the RSI register and the
+RDI register is written to the RSI register. Since x86-64 integer arithmetic instructions usually
+only accept two registers, the result is saved by overwriting the value of the first argument
+register.
+
+The function's return value was supposed to be stored in RAX. Therefore, we want the result of
+the addition to be stored in RAX, so we need to copy the value from RSI to RAX. Here, we
+movare doing this using a command. mov is an abbreviation for move, but in reality, it's a
+command that simply copies the data, not moves it.
+
+At the end of the function plus, it calls a method to return from the function. Specifically,
+ret does the following:
+- Pop one address from the stack.
+- Jump to that address
+
+Basically ret command undoes what was done and resumes execution of the calling
+function. It is defined as a command that is paired with call. 
+
+Here, the return value of plus is stored
+in RAX, so by returning directly, it can be made to be the return value of main.
+
+## test3.s vs test4.s
+
+rdi and edi are different-sized views of the same physical register:
+64-bit register:   RDI
+                     │
+                     └── lower 32 bits: EDI
+
+Likewise:
+RSI
+ │
+ └── lower 32 bits: ESI
+
+RAX
+ │
+ └── lower 32 bits: EAX
+
+Our C function uses int a, int b, int plus()
+
+An int on your x86-64 Linux system is 32 bits, so GCC uses edi, esi, and eax
+
+Our sample test4.s uses rdi, rsi, and rax to keep the example simple.
+
+Also, instead of just:
+plus:
+    add rsi, rdi
+    mov rax, rsi
+    ret
+
+GCC gives:
+push rbp
+mov rbp, rsp
+
+mov DWORD PTR [rbp-4], edi
+mov DWORD PTR [rbp-8], esi
+
+...
+
+GCC is creating a stack frame for plus:
+             stack
+               ↓
+       ┌─────────────────┐
+       │ saved RBP       │
+       ├─────────────────┤
+       │ a               │
+       ├─────────────────┤
+       │ b               │
+       └─────────────────┘
+
+It's taking the incoming arguments: 
+EDI = a
+ESI = b
+
+and storing them in memory:
+[rbp-4] = a
+[rbp-8] = b
+
+RBP (Register Base Pointer) is a CPU register. A common use for RBP is to act as a reference point for a function's stack frame. 
+             stack
+               ↓
+
+        ┌─────────────────┐
+        │                 │
+        │ function stuff  │
+        │                 │
+        └─────────────────┘
+               ↑
+              RBP
+The stack is simply a region of your program's memory that functions commonly use for temporary storage. RSP = Stack Pointer points roughly to the top of the stack.
+
+RBP can be used as a stable reference point within the current function's stack frame.
+higher memory
+       │
+       │
+       ▼
+┌──────────────────┐
+│ caller's stuff   │
+├──────────────────┤
+│ return address   │
+├──────────────────┤ ← RBP
+│ local variable   │ ← [rbp-4]
+├──────────────────┤
+│ local variable   │ ← [rbp-8]
+└──────────────────┘
+       ↑
+      RSP
+       │
+lower memory
+
+mov DWORD PTR [rbp-4], edi
+means:
+memory address = RBP - 4
+store the value of EDI there
+
+where [rbp-4] is basically "the memory location 4 bytes below RBP" and [rbp-8] is "the memory location 8 bytes below RBP"
+
+             RBP
+              ↓
+        ┌──────────────┐
+        │              │
+        ├──────────────┤
+        │      a       │ ← [rbp-4]
+        ├──────────────┤
+        │      b       │ ← [rbp-8]
+        └──────────────┘
+
+Our C function has two int parameters and an int is 4 bytes. So GCC can give them 4-byte slots. Then when GCC does 'mov DWORD PTR [rbp-4], edi' meaning a = EDI.
+
+Theoretically GCC could just do:
+             RBP
+              ↓
+        ┌──────────────┐
+        │              │
+        ├──────────────┤
+        │      a       │ ← [rbp-4]
+        ├──────────────┤
+        │      b       │ ← [rbp-8]
+        └──────────────┘
+
+But you compiled without optimization (-O0), so GCC wants a conventional stack representation for the variables.
+
+It essentially does:
+EDI ──────→ [RBP-4]   (a)
+ESI ──────→ [RBP-8]   (b)
+
+Then later:
+mov edx, DWORD PTR [rbp-4]
+mov eax, DWORD PTR [rbp-8]
+add eax, edx
+
+Then, we have:
+push rbp
+mov rbp, rsp
+
+When push rbp is executed, the CPU puts the old RBP value onto the stack. 
+
+Conceptually:
+Before:
+
+RBP → old frame
+RSP → top of stack
+
+
+After push rbp:
+
+        ┌──────────────┐
+        │ old RBP      │ ← RSP
+        └──────────────┘
+
+Then, mov rbp, rsp, turns it into:
+Now:
+RBP
+ ↓
+┌──────────────┐
+│ old RBP      │
+└──────────────┘
+↑
+RSP
+
+So RBP becomes a stable reference point for this function's stack frame.
+
+Then GCC can say:
+[rbp-4]
+[rbp-8]
+and know exactly where its local data is.
+
+At the end:
+pop rbp
+ret
+
+pop rbp restores the old RBP that was saved by push rbp and ret handles the return address that was put on the stack by call.
+
+test3_2.s provides us with an optimized version, but since it is compiled using -02, GCC looked at your whole program, not just each line independently, and realized what the final result would be.
+
+lea eax, [rdi+rsi]
+lea means Load Effective Address and it calculates that expression without actually accessing memory. Because of an optimisation called "constant folding", 3+4 was evaluated at compile time, so GCC replaces the whole calculation with:
+mov eax, 7
+ret
+
+Constant folding is a compiler optimization technique that evaluates constant expressions at compile time instead of waiting for runtime.
