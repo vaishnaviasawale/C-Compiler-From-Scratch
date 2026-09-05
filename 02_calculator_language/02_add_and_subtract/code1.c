@@ -25,7 +25,7 @@ int main(int argc, char **argv) {
             printf("    sub rax, %ld\n", strtol(p, &p, 10));
             continue;
         }
-        fprintf(stderr, "Printing : '%c'\n", *p);
+        fprintf(stderr, "Unexpected character: '%c'\n", *p);
         return 1;
     }
 
